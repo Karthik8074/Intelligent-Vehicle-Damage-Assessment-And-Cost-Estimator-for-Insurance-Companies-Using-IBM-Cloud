@@ -1,0 +1,144 @@
+This project is a web application built with Flask that allows users to register, log in, and upload images of vehicle damage to receive an estimated repair cost.
+The application leverages two pre-trained models (body.h5 and level.h5) to predict the location and severity of the damage.
+
+Features
+User Authentication: Users can register and log in to access the prediction feature.
+Image Upload: Users can upload images of the damaged vehicle parts.
+Damage Assessment: The application predicts the location (front, rear, side) and severity (minor, moderate, severe) of the damage.
+Cost Estimation: Based on the predictions, the application provides an estimated repair cost.
+Technologies Used
+Backend: Flask
+Machine Learning: TensorFlow, Keras
+Database: IBM Cloudant
+Image Processing: TensorFlow Keras preprocessing
+Code Breakdown
+Loading Models:
+
+python
+Copy code
+model1 = load_model("body.h5")
+model2 = load_model("level.h5")
+Flask App Initialization:
+
+python
+Copy code
+app = Flask(__name__)
+Home Route:
+
+python
+Copy code
+@app.route('/')
+def index():
+    return render_template('index.html')
+User Registration:
+
+python
+Copy code
+@app.route('/register')
+def register():
+    return render_template('register.html')
+
+@app.route('/afterreg', methods=['POST'])
+def afterreg():
+    x = [x for x in request.form.values()]
+    data = {
+        '_id': x[1], 
+        'name': x[0],
+        'psw': x[2]
+    }
+    
+    query = {'_id': {'$eq': data['_id']}}
+    docs = my_database.get_query_result(query)
+    
+    if len(docs.all()) == 0:
+        url = my_database.create_document(data)
+        return render_template('register.html', pred="Registration Successful, please login using your details")
+    else:
+        return render_template('register.html', pred="You are already a member, please login using your details")
+User Login:
+
+python
+Copy code
+@app.route('/login')
+def login():
+    return render_template('login.html')
+
+@app.route('/afterlogin', methods=['POST'])
+def afterlogin():
+    user = request.form['_id']
+    passw = request.form['psw']
+    
+    query = {'_id': {'$eq': user}}    
+    docs = my_database.get_query_result(query)
+    
+    if len(docs.all()) == 0:
+        return render_template('login.html', pred="The username is not found.")
+    else:
+        if user == docs[0][0]['_id'] and passw == docs[0][0]['psw']:
+            return redirect(url_for('prediction'))
+        else:
+            return render_template('login.html', pred="Invalid credentials.")
+Damage Prediction:
+
+python
+Copy code
+@app.route('/prediction')
+def prediction():
+    return render_template('prediction.html')
+
+@app.route('/result', methods=["GET", "POST"])
+def res():
+    if request.method == "POST":
+        f = request.files['image']
+        basepath = os.path.dirname(__file__)
+        filepath = os.path.join(basepath, 'uploads', f.filename)
+        f.save(filepath)
+
+        img = image.load_img(filepath, target_size=(224, 224))
+        x = image.img_to_array(img)
+        x = np.expand_dims(x, axis=0)
+        img_data = preprocess_input(x)
+        
+        prediction1 = np.argmax(model1.predict(img_data))
+        prediction2 = np.argmax(model2.predict(img_data))
+
+        index1 = ['front', 'rear', 'side']
+        index2 = ['minor', 'moderate', 'severe']
+        result1 = index1[prediction1]
+        result2 = index2[prediction2]
+
+        if result1 == "front" and result2 == "minor":
+            number = "3000 - 5000 INR"
+        elif result1 == "front" and result2 == "moderate":
+            number = "6000 - 8000 INR"
+        elif result1 == "front" and result2 == "severe":
+            number = "9000 - 11000 INR"
+        elif result1 == "rear" and result2 == "minor":
+            number = "4000 - 6000 INR"
+        elif result1 == "rear" and result2 == "moderate":
+            number = "7000 - 10000 INR"
+        elif result1 == "rear" and result2 == "severe":
+            number = "11000 - 13000 INR"
+        elif result1 == "side" and result2 == "minor":
+            number = "6000 - 8000 INR"
+        elif result1 == "side" and result2 == "moderate":
+            number = "9000 - 11000 INR"
+        elif result1 == "side" and result2 == "severe":
+            number = "12000 - 15000 INR"
+        else:
+            number = "15000 - 50000 INR"
+
+        return render_template('prediction.html', prediction=number)
+Running the Application:
+
+python
+Copy code
+if __name__ == "__main__":
+    app.run(debug=False, port=8080)
+Usage
+Clone the repository.
+Install the required dependencies.
+Run the Flask application.
+Navigate to http://localhost:8080 in your web browser.
+Register or log in to access the damage prediction feature.
+Upload an image of the vehicle damage and get an estimated repair cost.
